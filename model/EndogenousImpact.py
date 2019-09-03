@@ -47,45 +47,6 @@ class BasicEndogenousImpact(nn.Module):
         logger.info('The number of event types = {}.'.format(self.num_type))
         self.decay_kernel.print_info()
 
-    def expect_counts(self, sample_dict: Dict):
-        """
-        Calculate the expected number of events in dts
-        sum_i int_{0}^{dt_i} phi_cc_i(s)ds for dt_i in "dts" and c in {1, ..., num_type}
-
-        :param sample_dict is a dictionary contains a batch of samples
-        sample_dict = {
-            'cjs': history (batch_size, memory_size) LongTensor indicates historical events' types in the batch
-            'ti': event_time (batch_size, 1) FloatTensor indicates each event's timestamp in the batch
-            'tjs': history_time (batch_size, memory_size) FloatTensor represents history's timestamps in the batch
-            'Cs': all_types (num_type, 1) LongTensor indicates all event types
-            }
-        :return:
-            phi_c: (batch_size, 1) FloatTensor represents phi_{c_i, c_j}(t_i - t_j);
-            pHi: (batch_size, num_type) FloatTensor represents sum_{c} sum_{i in history} int_{start}^{stop} phi_cc_i(s)ds
-        """
-        event_time = sample_dict['ti']     # (batch_size, 1)
-        history_time = sample_dict['tjs']  # (batch_size, memory_size)
-        history = sample_dict['cjs']       # (batch_size, memory_size)
-        all_types = sample_dict['Cs']      # (num_type, 1)
-
-        dts = event_time.repeat(1, history_time.size(1)) - history_time   # (batch_size, memory_size)
-        t_start = history_time[:, -1].repeat(1, history_time.size(1)) - history_time  # (batch_size, memory_size)
-        t_stop = dts                                                                  # (batch_size, memory_size)
-        Gt = self.decay_kernel.integrations(t_stop.numpy(), t_start.numpy())
-        Gt = torch.from_numpy(Gt)
-        Gt = Gt.type(torch.FloatTensor)                                   # (batch_size, memory_size, num_base)
-        history2 = history.unsqueeze(1).repeat(1, all_types.size(0), 1)   # (batch_size, num_type, memory_size)
-
-        pHi = 0
-        for m in range(self.num_base):
-            A_all = self.basis[m](all_types)                      # (num_type, 1, dim_embedding)
-            A_all = A_all.squeeze(1).unsqueeze(0)                 # (1, num_type, dim_embedding)
-            A_all = A_all.repeat(Gt.size(0), 1, 1)                # (batch_size, num_type, dim_embedding)
-            A_all = A_all.gather(2, history2)                     # (batch_size, num_type, memory_size)
-            pHi += torch.bmm(A_all, Gt[:, :, m].unsqueeze(2))     # (batch_size, num_type, 1)
-        pHi = pHi[:, :, 0]
-        return pHi
-
     def granger_causality(self, sample_dict: Dict):
         """
         Calculate the granger causality among event types
