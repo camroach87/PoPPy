@@ -47,41 +47,6 @@ class BasicEndogenousImpact(nn.Module):
         logger.info('The number of event types = {}.'.format(self.num_type))
         self.decay_kernel.print_info()
 
-    def intensity(self, sample_dict: Dict):
-        """
-        Calculate intensity of event
-        phi_{c_i,c_j}(t_i - t_j) for c_i in "events";
-
-        :param sample_dict is a dictionary contains a batch of samples
-        sample_dict = {
-            'ci': events (batch_size, 1) LongTensor indicates each event's type in the batch
-            'cjs': history (batch_size, memory_size) LongTensor indicates historical events' types in the batch
-            'ti': event_time (batch_size, 1) FloatTensor indicates each event's timestamp in the batch
-            'tjs': history_time (batch_size, memory_size) FloatTensor represents history's timestamps in the batch
-            }
-        :return:
-            phi_c: (batch_size, 1) FloatTensor represents phi_{c_i, c_j}(t_i - t_j);
-            pHi: (batch_size, num_type) FloatTensor represents sum_{c} sum_{i in history} int_{start}^{stop} phi_cc_i(s)ds
-        """
-        event_time = sample_dict['ti']     # (batch_size, 1)
-        history_time = sample_dict['tjs']  # (batch_size, memory_size)
-        events = sample_dict['ci']         # (batch_size, 1)
-        history = sample_dict['cjs']       # (batch_size, memory_size)
-        dts = event_time.repeat(1, history_time.size(1)) - history_time  # (batch_size, memory_size)
-        gt = self.decay_kernel.values(dts.numpy())
-        gt = torch.from_numpy(gt)
-        gt = gt.type(torch.FloatTensor)    # (batch_size, memory_size, num_base)
-
-        phi_c = 0
-        for m in range(self.num_base):
-            A_cm = self.basis[m](events)                        # (batch_size, 1, dim_embedding)
-            A_cm = A_cm.squeeze(1)                              # (batch_size, dim_embedding)
-            A_cm = A_cm.gather(1, history)                      # (batch_size, memory_size)
-            A_cm = A_cm.unsqueeze(1)                            # (batch_size, 1, memory_size)
-            phi_c += torch.bmm(A_cm, gt[:, :, m].unsqueeze(2))  # (batch_size, 1, 1)
-        phi_c = phi_c[:, :, 0]
-        return phi_c
-
     def expect_counts(self, sample_dict: Dict):
         """
         Calculate the expected number of events in dts
