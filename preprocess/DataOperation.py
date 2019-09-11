@@ -366,7 +366,7 @@ def aggregating(database, dt):
 
 class EventSampler(Dataset):
     """Load event sequences via minbatch"""
-    def __init__(self, database, memorysize):
+    def __init__(self, database, memorysize, t_pad_former: float = 0.0):
         """
         :param database: the observed event sequences
             database = {'event_features': None or (C, De) float array of event's static features,
@@ -386,6 +386,9 @@ class EventSampler(Dataset):
                      't_stop': a float number indicating the stop timestamp of the sequence.
                      'label': None or int/float number indicating the labels of the sequence}
         :param memorysize: how many historical events remembered by each event
+        :param t_pad_former: time for historical padding events. If an early event doesn not
+                             have enough historical events to fill memorysize, random events
+                             are created occurring at this time.
         """
         self.event_cell = []
         self.time_cell = []
@@ -404,7 +407,8 @@ class EventSampler(Dataset):
                 # former = former[:memorysize]
                 former = np.random.choice(len(self.database['type2idx']), memorysize)
                 target_t = times[j]
-                former_t = t_start * np.ones((memorysize,))
+                # former_t = t_start * np.ones((memorysize,))
+                former_t = [t_pad_former] * np.ones((memorysize,))
 
                 if 0 < j < memorysize:
                     former[-j:] = events[:j]
