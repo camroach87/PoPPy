@@ -8,7 +8,7 @@ import time
 import torch
 from dev.util import logger
 from preprocess.DataOperation import samples2dict
-from model.OtherLayers import MaxLogLike, LeastSquare, CrossEntropy, LowerBoundClipper
+from model.OtherLayers import MaxLogLike, LeastSquare, CrossEntropy, LowerBoundClipper, Diagnostics
 import model.ExogenousIntensityFamily
 
 
@@ -54,7 +54,7 @@ class PointProcessModel(object):
         logger.info("The loss function is {}.".format(self.loss_function))
 
     def fit(self, dataloader, optimizer, epochs: int, scheduler=None, sparsity: float=None, nonnegative=None,
-            use_cuda: bool=False, validation_set=None):
+            use_cuda: bool=False, validation_set=None, track_diagnostics=False):
         """
         Learn parameters of a generalized Hawkes process given observed sequences
         :param dataloader: a pytorch batch-based data loader
@@ -65,6 +65,7 @@ class PointProcessModel(object):
         :param nonnegative: None or a float lower bound, typically the lower bound = 0
         :param use_cuda: use cuda (true) or not (false)
         :param validation_set: None or a validation dataloader
+        :param track_diagnostics: Set to True to return historical loss values and weights.
         """
         device = torch.device('cuda:0' if use_cuda else 'cpu')
         self.lambda_model.to(device)
@@ -93,6 +94,9 @@ class PointProcessModel(object):
         else:
             best_loss = np.inf
 
+        if track_diagnostics:
+            self.diagnostics = Diagnostics()
+
         for epoch in range(epochs):
             if scheduler is not None:
                 scheduler.step()
@@ -111,6 +115,11 @@ class PointProcessModel(object):
                 optimizer.step()
                 if nonnegative is not None:
                     self.lambda_model.apply(clipper)
+
+                if track_diagnostics:
+                    self.diagnostics.loss.append(loss.data.item())
+                    self.diagnostics.mu.append(self.lambda_model.exogenous_intensity.emb.weight.squeeze().tolist())
+                    self.diagnostics.alpha.append(self.lambda_model.endogenous_intensity.basis[0].weight.squeeze().tolist())
 
                 # display training processes
                 if batch_idx % 100 == 0:

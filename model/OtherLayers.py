@@ -189,5 +189,12 @@ class WassersteinDiscrepancy(nn.Module):
 
 
 
-
-
+class Diagnostics():
+    """
+    Class to track weights and loss.
+    """
+    def __init__(self):
+        self.loss = []
+        self.mu = []
+        self.alpha = []
+                
